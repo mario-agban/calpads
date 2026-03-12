@@ -15,6 +15,7 @@ from .files_upload_form import FilesUploadForm
 class CALPADSClient:
 
     def __init__(self, username, password):
+        print("CALPADS CLIENT PATCH 2026-03-12 A")
         self.host = "https://www.calpads.org/"
         self.username = username
         self.password = password
