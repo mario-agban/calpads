@@ -473,31 +473,46 @@ class CALPADSClient:
         path = parsed.path
         netloc = parsed.netloc.lower()
 
-        # New interim login page on www.calpads.org
-        if netloc == "www.calpads.org" and path == "/login" and r.status_code == 200:
-            self.log.info("Handling new interim CALPADS login page.")
-            self.session.cookies.update(r.cookies.get_dict())
+ if netloc == "www.calpads.org" and path == "/login" and r.status_code == 200:
+    self.log.info("Handling new interim CALPADS login page.")
+    self.session.cookies.update(r.cookies.get_dict())
 
-            root = etree.fromstring(r.text, parser=etree.HTMLParser(encoding='utf8'))
+    root = etree.fromstring(r.text, parser=etree.HTMLParser(encoding='utf8'))
 
-            # Find the link for "Login with Existing CALPADS Username"
-            href = None
-            candidates = root.xpath("//a[@href]")
-            for a in candidates:
-                text = "".join(a.itertext()).strip().lower()
-                if "existing calpads username" in text:
-                    href = a.attrib.get("href")
-                    break
+    href = None
 
-            if not href:
-                self.log.warning("Could not find 'Login with Existing CALPADS Username' link on interim login page.")
-                self.visit_history.append(r)
-                return r
+    # Most specific: anchor containing a descendant <strong> with the label
+    matches = root.xpath(
+        "//a[@href][.//strong[contains(normalize-space(.), 'Login with Existing CALPADS Username')]]"
+    )
+    if matches:
+        href = matches[0].attrib.get("href")
 
-            next_url = urljoin(r.url, href)
-            self.log.info("Following interim login link: %s", next_url)
-            self.session.get(next_url)
-            return r
+    # Fallback: any anchor containing that phrase anywhere in descendant text
+    if not href:
+        matches = root.xpath(
+            "//a[@href][contains(normalize-space(string(.)), 'Login with Existing CALPADS Username')]"
+        )
+        if matches:
+            href = matches[0].attrib.get("href")
+
+    # Last-resort debug logging
+    if not href:
+        self.log.warning("Could not find 'Login with Existing CALPADS Username' link on interim login page.")
+
+        anchors = root.xpath("//a[@href]")
+        self.log.warning("Found %s anchors on interim login page.", len(anchors))
+        for i, a in enumerate(anchors[:10], start=1):
+            anchor_text = " ".join("".join(a.itertext()).split())
+            self.log.warning("Anchor %s: href=%r text=%r", i, a.attrib.get("href"), anchor_text)
+
+        self.visit_history.append(r)
+        return r
+
+    next_url = urljoin(r.url, href)
+    self.log.info("Following interim login link: %s", next_url)
+    self.session.get(next_url)
+    return r
 
         # Identity provider login page
         elif path == '/Account/Login' and netloc == 'identity.calpads.org' and r.status_code == 200:
